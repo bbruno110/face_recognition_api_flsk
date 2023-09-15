@@ -2,23 +2,26 @@ import dlib
 import cv2
 import os
 import numpy as np
-
+import time
 
 face_detector = dlib.get_frontal_face_detector()
 face_recognizer = dlib.face_recognition_model_v1('dlib_face_recognition_resnet_model_v1.dat')
 
-
 shape_predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
-
 cur_direc = os.getcwd()
-path = os.path.join(cur_direc+ '/img/')
+path = os.path.join(cur_direc + '/img/')
 folder_path = path
 face_descriptors = []
+
+# Variáveis para calcular o FPS
+start_time = time.time()
+frame_count = 0
+
 for filename in os.listdir(folder_path):
     img = cv2.imread(os.path.join(folder_path, filename))
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
+
     # Detecte o rosto na imagem
     faces = face_detector(gray, 1)
     if len(faces) > 0:
@@ -37,16 +40,28 @@ while True:
     ret, frame = cap.read()
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_detector(gray, 1)
-    
-    # Desenhe um retângulo ao redor do rosto detectado
+
+    # Atualizar o contador de quadros
+    frame_count += 1
+    elapsed_time = time.time() - start_time
+
+    # Calcular o FPS a cada segundo
+    if elapsed_time > 1.0:
+        fps = frame_count / elapsed_time
+        start_time = time.time()
+        frame_count = 0
+
+    # Exibir o FPS no canto superior esquerdo do quadro
+    cv2.putText(frame, f'FPS: {fps:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
     for face in faces:
         x1 = face.left()
         y1 = face.top()
         x2 = face.right()
         y2 = face.bottom()
-        
+
         # Encontre os pontos de referência do rosto
-        shape = shape_predictor(gray, face)
+        shape = shape_predictor(frame, face)
 
         # Calcule a distância entre os pontos de referência dos lábios superior e inferior
         top_lip = shape.part(62).y
@@ -63,27 +78,28 @@ while True:
             cv2.drawContours(frame, [teeth_points], -1, (0, 255, 0), 2)
         else:
             cv2.drawContours(frame, [teeth_points], -1, (0, 0, 255), 2)
+
+        # Calcule o descritor facial do quadro
         face_descriptor = face_recognizer.compute_face_descriptor(frame, shape)
-        
+
+        # Compare o descritor facial com os descritores das imagens na pasta "img"
         distances = np.linalg.norm(face_descriptors - face_descriptor, axis=1)
         best_match_index = np.argmin(distances)
-        
-        # Se a distância for pequena o suficiente (abaixo de um limiar), desenhe um retângulo verde ao redor do rosto e exiba o nome do arquivo da imagem correspondente
+
+        # Se a distância for pequena o suficiente (abaixo de um limiar), exiba o nome do arquivo da imagem correspondente
         if distances[best_match_index] < 0.48:
-            cv2.rectangle(frame,(x1,y1),(x2,y2),(0,255,0),2)
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            filename = os.listdir(folder_path)[best_match_index]
-            filename_without_extension = os.path.splitext(filename)[0]
-            cv2.putText(frame, filename_without_extension, (x1,y1-10), font, 1, (0,255,0), 2)
+            matched_image = os.listdir(folder_path)[best_match_index]
+            filename_without_extension = os.path.splitext(matched_image)[0]
+            cv2.putText(frame, filename_without_extension, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         else:
-            cv2.rectangle(frame,(x1,y1),(x2,y2),(255,0,0),2)
-    
-    # Exiba o frame com o retângulo desenhado ao redor do rosto e o contorno verde ao redor da boca
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+    # Exiba o frame com o contorno desenhado ao redor da boca e a mensagem de correspondência
     cv2.imshow('frame', frame)
-    
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+# Libere a captura de vídeo e feche a janela
 cap.release()
 cv2.destroyAllWindows()
