@@ -6,12 +6,11 @@ import os
 import numpy as np
 import time
 from flask_cors import CORS, cross_origin
-
+import uuid  # Importe o módulo uuid
 
 app = Flask(__name__)
 CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
-app.run(host='0.0.0.0', port=5000)
 logging.basicConfig(level=logging.DEBUG)
 logger = app.logger
 file_handler = logging.FileHandler('app.log')
@@ -23,25 +22,12 @@ face_detector = dlib.get_frontal_face_detector()
 face_recognizer = dlib.face_recognition_model_v1('dlib_face_recognition_resnet_model_v1.dat')
 shape_predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
-# Carregue os descritores faciais das imagens na pasta 'img'
-cur_direc = os.getcwd()
-path = os.path.join(cur_direc + '/img/')
-folder_path = path
-face_descriptors = []
-for filename in os.listdir(folder_path):
-    img = cv2.imread(os.path.join(folder_path, filename))
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Detecte o rosto na imagem
-    faces = face_detector(gray, 1)
-    if len(faces) > 0:
-        # Encontre os pontos de referência do rosto
-        shape = shape_predictor(gray, faces[0])
-        # Calcule o descritor facial da imagem
-        face_descriptor = face_recognizer.compute_face_descriptor(img, shape)
-        face_descriptors.append(face_descriptor)
+# Pasta onde as imagens serão armazenadas
+img_folder = "imgs"
 
-# Converta a lista de descritores faciais em um array numpy
-face_descriptors = np.array(face_descriptors)
+# Verifica se a pasta de imagens existe, senão cria
+if not os.path.exists(img_folder):
+    os.makedirs(img_folder)
 
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
@@ -60,8 +46,9 @@ def detect_teeth():
     if not allowed_file(photo.filename):
         return jsonify({'message': 'Extensão de arquivo não suportada'}), 400
 
-    # Salve a imagem temporariamente
-    photo_path = 'temp.jpg'
+    # Gere um nome de arquivo único usando um UUID
+    unique_filename = str(uuid.uuid4()) + '.jpg'
+    photo_path = os.path.join(img_folder, unique_filename)
     photo.save(photo_path)
 
     # Carregue a imagem e execute a detecção de dentes
@@ -82,7 +69,7 @@ def detect_teeth():
             # Defina um limiar para determinar se os dentes estão visíveis ou não
             lip_distance_threshold = 1
 
-            # Desenhe um contorno verde ao redor dos dentes se eles estiverem visíveis, caso contrário retorne uma mensagem
+            # Desenhe um contorno verde ao redor dos dentes se eles estiverem visíveis, caso contrário, retorne uma mensagem
             teeth_points = shape.parts()[60:68]
             teeth_points = np.array([[p.x, p.y] for p in teeth_points])
             if lip_distance > lip_distance_threshold:
@@ -93,11 +80,10 @@ def detect_teeth():
         # Salve a imagem com os contornos dos dentes desenhados
         cv2.imwrite(photo_path, img)
 
-        # Retorna a imagem resultante como resposta, ou você pode retornar uma mensagem de sucesso
+        # Retorna a imagem resultante com o nome original como resposta
         return send_file(photo_path, mimetype='image/jpeg'), 200
     else:
         return jsonify({'message': 'Nenhum rosto detectado na imagem'}), 400
-
 
 @app.route('/', methods=['GET'])
 def ping():
