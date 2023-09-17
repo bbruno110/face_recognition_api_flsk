@@ -2,4 +2,4 @@ flask
 numpy
 requests
 gunicorn
-dlib
+dlib==19.24.2
